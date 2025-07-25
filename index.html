@@ -1,0 +1,730 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Invoice Data Generator</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;700&display=swap" rel="stylesheet">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+    <style>
+        body { font-family: 'Inter', sans-serif; }
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+        .fade-in { animation: fadeIn 0.5s ease-out forwards; }
+        .file-input-label {
+            cursor: pointer; padding: 0.5rem 1rem; border-radius: 0.375rem;
+            background-color: #4f46e5; color: white; font-weight: 500;
+            transition: background-color 0.2s; display: inline-block;
+        }
+        .file-input-label:hover { background-color: #4338ca; }
+        #upload-file { display: none; }
+        /* Toggle Switch Styles */
+        .toggle-checkbox:checked { right: 0; border-color: #4f46e5; }
+        .toggle-checkbox:checked + .toggle-label { background-color: #4f46e5; }
+    </style>
+</head>
+<body class="bg-gray-50 text-gray-800">
+
+    <div class="container mx-auto p-4 sm:p-6 lg:p-8 max-w-7xl">
+        <div class="bg-white rounded-2xl shadow-lg overflow-hidden">
+            
+            <div class="p-6 sm:p-8 bg-gray-800 text-white">
+                <h1 class="text-2xl lg:text-3xl font-bold">Invoice Data Generator</h1>
+                <p class="mt-2 text-gray-300">Generate invoices based on a date range, optional bank receipts, and cash receipts.</p>
+            </div>
+
+            <div class="p-6 sm:p-8">
+                <form id="invoice-form" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-x-6 gap-y-8 mb-8">
+                    
+                    <div class="lg:col-span-4"><p class="block text-sm font-medium text-gray-700 mb-2">1. Define Period</p></div>
+                    <div class="lg:col-span-2">
+                        <label for="start-date" class="block text-sm font-medium text-gray-700 mb-1">Start Date</label>
+                        <input type="date" id="start-date" value="2025-04-01" class="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500">
+                    </div>
+                    <div class="lg:col-span-2">
+                        <label for="end-date" class="block text-sm font-medium text-gray-700 mb-1">End Date</label>
+                        <input type="date" id="end-date" value="2025-06-30" class="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500">
+                    </div>
+
+                    <div class="lg:col-span-4 bg-indigo-50 p-4 rounded-lg border border-indigo-200">
+                        <label class="block text-sm font-medium text-gray-700 mb-2">2. Upload Bank Receipts (Optional)</label>
+                        <div class="flex flex-wrap items-center gap-4">
+                            <label for="upload-file" class="file-input-label shadow-sm">Choose Excel File</label>
+                            <input type="file" id="upload-file" accept=".xlsx, .xls, .csv">
+                            <span id="file-name" class="text-sm text-gray-600">No file chosen</span>
+                            <button type="button" id="clear-file" class="hidden text-sm text-red-600 hover:text-red-800 font-medium">Clear</button>
+                            <button type="button" id="download-template" class="text-sm text-indigo-600 hover:text-indigo-800 font-medium ml-auto">Download Template</button>
+                        </div>
+                         <div id="annotated-download-container" class="hidden mt-2">
+                            <button type="button" id="download-annotated" class="text-sm text-green-700 hover:text-green-900 font-medium">Download Annotated File with Ignored Rows</button>
+                         </div>
+                        <p class="text-xs text-gray-500 mt-2">File must contain "Date" and "Amount" columns.</p>
+                    </div>
+
+                    <div class="lg:col-span-4"><p class="block text-sm font-medium text-gray-700 mb-2">3. Enter Totals & Constraints</p></div>
+                    <div>
+                        <label for="total-cash-receipts" class="block text-sm font-medium text-gray-700 mb-1">Total Cash Receipts</label>
+                        <input type="number" id="total-cash-receipts" value="0" step="0.01" class="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500">
+                    </div>
+                    <div>
+                        <label for="total-quantity" class="block text-sm font-medium text-gray-700 mb-1">Total Quantity</label>
+                        <input type="number" id="total-quantity" value="100" step="1" class="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500">
+                    </div>
+                     <div>
+                        <label for="min-rate" class="block text-sm font-medium text-gray-700 mb-1">Min Rate</label>
+                        <input type="number" id="min-rate" value="500" step="1" class="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500">
+                    </div>
+                    <div>
+                        <label for="max-rate" class="block text-sm font-medium text-gray-700 mb-1">Max Rate</label>
+                        <input type="number" id="max-rate" value="10000" step="1" class="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500">
+                    </div>
+                    
+                    <div>
+                         <label for="min-qty-per-invoice" class="block text-sm font-medium text-gray-700 mb-1">Min Qty / Invoice</label>
+                        <input type="number" id="min-qty-per-invoice" value="1" step="1" class="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500">
+                    </div>
+                    <div>
+                        <label for="max-qty-per-invoice" class="block text-sm font-medium text-gray-700 mb-1">Max Qty / Invoice</label>
+                        <input type="number" id="max-qty-per-invoice" value="10" step="1" class="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500">
+                    </div>
+                    
+                     <div>
+                        <label for="min-invoices-display" class="block text-sm font-medium text-gray-700 mb-1">Min # of Invoices (Req.)</label>
+                        <input type="text" id="min-invoices-display" disabled class="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm bg-gray-100 cursor-not-allowed">
+                    </div>
+                    <div>
+                        <label for="num-invoices-required" class="block text-sm font-medium text-gray-700 mb-1"># of Invoices Required</label>
+                        <input type="number" id="num-invoices-required" value="100" step="1" class="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500">
+                    </div>
+
+                    <div class="lg:col-span-2">
+                        <label for="max-invoice-value" class="block text-sm font-medium text-gray-700 mb-1">Max Invoice Value</label>
+                        <input type="number" id="max-invoice-value" value="50000" step="1" class="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500">
+                    </div>
+                     <div class="lg:col-span-2">
+                        <label for="total-invoice-value" class="block text-sm font-medium text-gray-700 mb-1">Total Invoice Value (Auto)</label>
+                        <input type="text" id="total-invoice-value" disabled class="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm bg-gray-100 cursor-not-allowed">
+                    </div>
+                    <div class="lg:col-span-1">
+                        <label for="start-inv-num" class="block text-sm font-medium text-gray-700 mb-1">Starting Invoice #</label>
+                        <input type="number" id="start-inv-num" value="1" step="1" class="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500">
+                    </div>
+                    <div class="lg:col-span-1">
+                        <label for="rounding-off" class="block text-sm font-medium text-gray-700 mb-1">Rounding Off</label>
+                        <select id="rounding-off" class="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500">
+                            <option value="1" selected>Nearest One</option>
+                            <option value="10">Nearest 10th</option>
+                            <option value="100">Nearest 100th</option>
+                            <option value="1000">Nearest 1000th</option>
+                        </select>
+                    </div>
+
+                     <div class="lg:col-span-4 flex items-center justify-start gap-4">
+                        <label for="aggressive-swings" class="block text-sm font-medium text-gray-700">Aggressive Rate Swings</label>
+                        <div class="relative inline-block w-10 mr-2 align-middle select-none transition duration-200 ease-in">
+                            <input type="checkbox" name="aggressive-swings" id="aggressive-swings" class="toggle-checkbox absolute block w-6 h-6 rounded-full bg-white border-4 appearance-none cursor-pointer"/>
+                            <label for="aggressive-swings" class="toggle-label block overflow-hidden h-6 rounded-full bg-gray-300 cursor-pointer"></label>
+                        </div>
+                     </div>
+
+                    <div class="lg:col-span-4 mt-4 grid grid-cols-1 sm:grid-cols-2 gap-4">
+                        <button type="submit" class="w-full bg-indigo-600 text-white font-bold py-3 px-4 rounded-lg shadow-md hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 transition-transform transform hover:scale-105 duration-300">
+                         Generate Invoices
+                        </button>
+                         <button type="button" id="reset-form" class="w-full bg-gray-500 text-white font-bold py-3 px-4 rounded-lg shadow-md hover:bg-gray-600 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-gray-400 transition-transform transform hover:scale-105 duration-300">
+                           Reset
+                        </button>
+                    </div>
+                </form>
+
+                <div id="message-box" class="hidden p-4 mb-6 rounded-md"></div>
+
+                <div id="results-section" class="hidden">
+                    <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-4 gap-4">
+                        <h2 class="text-xl font-bold text-gray-900">Generated Invoices</h2>
+                        <button id="download-csv" class="w-full sm:w-auto bg-green-600 text-white font-bold py-2 px-4 rounded-lg shadow-md hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500 transition duration-300">
+                             Download as CSV
+                        </button>
+                    </div>
+                    
+                     <div class="overflow-x-auto border border-gray-200 rounded-lg">
+                        <table class="min-w-full bg-white divide-y divide-gray-200">
+                            <thead class="bg-gray-50">
+                                 <tr>
+                                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Invoice #</th>
+                                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Date</th>
+                                    <th class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Quantity</th>
+                                    <th class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Rate</th>
+                                    <th class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Invoice Value</th>
+                                </tr>
+                            </thead>
+                             <tbody id="invoice-table-body" class="divide-y divide-gray-200"></tbody>
+                            <tfoot class="bg-gray-100 font-bold">
+                                <tr>
+                                    <td class="px-6 py-4 text-left" colspan="2">Totals</td>
+                                    <td id="total-qty-foot" class="px-6 py-4 text-right"></td>
+                                    <td class="px-6 py-4 text-right">--</td>
+                                    <td id="total-val-foot" class="px-6 py-4 text-right"></td>
+                                </tr>
+                            </tfoot>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            // --- DOM Elements ---
+            const form = document.getElementById('invoice-form');
+            const resultsSection = document.getElementById('results-section');
+            const tableBody = document.getElementById('invoice-table-body');
+            const messageBox = document.getElementById('message-box');
+            const downloadBtn = document.getElementById('download-csv');
+            const fileInput = document.getElementById('upload-file');
+            const fileNameSpan = document.getElementById('file-name');
+            const clearFileBtn = document.getElementById('clear-file');
+            const downloadTemplateBtn = document.getElementById('download-template');
+            const cashReceiptsInput = document.getElementById('total-cash-receipts');
+            const totalInvoiceValueDisplay = document.getElementById('total-invoice-value');
+            const totalQuantityInput = document.getElementById('total-quantity');
+            const minInvoicesDisplay = document.getElementById('min-invoices-display');
+            const resetBtn = document.getElementById('reset-form');
+            const annotatedDownloadContainer = document.getElementById('annotated-download-container');
+            const annotatedDownloadBtn = document.getElementById('download-annotated');
+            const minQtyPerInvoiceInput = document.getElementById('min-qty-per-invoice');
+            const maxQtyPerInvoiceInput = document.getElementById('max-qty-per-invoice');
+
+            // --- State ---
+            let generatedData = [];
+            let bankReceiptsByDate = new Map();
+            let totalBankReceipts = 0;
+            let originalUploadedJson = [];
+            let ignoredRowsMap = new Map();
+            
+            // --- CORE FUNCTIONS ---
+
+            function showMessage(htmlContent, type = 'info') {
+                messageBox.innerHTML = ''; // Prevent injection issues by clearing first
+                const contentDiv = document.createElement('div');
+                contentDiv.innerHTML = htmlContent;
+                messageBox.appendChild(contentDiv);
+                
+                messageBox.className = 'p-4 mb-6 rounded-md text-left'; // Reset classes
+                if (type === 'error') {
+                    messageBox.classList.add('bg-red-100', 'text-red-800');
+                } else {
+                    messageBox.classList.add('bg-blue-100', 'text-blue-800');
+                }
+                messageBox.classList.remove('hidden');
+            }
+
+            function hideMessage() {
+                messageBox.classList.add('hidden');
+                messageBox.innerHTML = '';
+            }
+            
+            function updateMinInvoicesDisplay() {
+                const totalQuantity = parseInt(totalQuantityInput.value) || 0;
+                const maxQty = parseInt(maxQtyPerInvoiceInput.value) || 1;
+                minInvoicesDisplay.value = totalQuantity > 0 ? Math.ceil(totalQuantity / maxQty) : '0';
+            }
+
+            function updateTotals() {
+                const cashReceipts = parseFloat(cashReceiptsInput.value) || 0;
+                const totalInvoiceValue = totalBankReceipts + cashReceipts;
+                totalInvoiceValueDisplay.value = totalInvoiceValue.toFixed(2);
+            }
+            
+            function handleReset() {
+                const defaults = {
+                    'start-date': '2025-04-01', 'end-date': '2025-06-30', 'total-cash-receipts': '0',
+                    'total-quantity': '100', 'min-rate': '500', 'max-rate': '10000',
+                    'min-qty-per-invoice': '1', 'max-qty-per-invoice': '10', 'num-invoices-required': '100',
+                    'start-inv-num': '1', 'rounding-off': '1', 'max-invoice-value': '50000'
+                };
+                Object.keys(defaults).forEach(id => { document.getElementById(id).value = defaults[id]; });
+                document.getElementById('aggressive-swings').checked = false;
+                clearFile();
+                hideMessage();
+                resultsSection.classList.add('hidden');
+                updateTotals();
+                updateMinInvoicesDisplay();
+            }
+
+            function parseDate(input) {
+                if (!input) return null;
+                if (input instanceof Date && !isNaN(input)) return new Date(Date.UTC(input.getFullYear(), input.getMonth(), input.getDate()));
+                
+                const s = String(input).trim();
+                let parts;
+
+                // Match YYYY-MM-DD (from date picker or string)
+                parts = s.match(/^(\d{4})-(\d{1,2})-(\d{1,2})$/);
+                if (parts) return new Date(Date.UTC(parts[1], parts[2] - 1, parts[3]));
+                
+                // Match DD-MM-YYYY
+                parts = s.match(/^(\d{1,2})-(\d{1,2})-(\d{4})$/);
+                if (parts) return new Date(Date.UTC(parts[3], parts[2] - 1, parts[1]));
+
+                // Try to let JS parse it as a last resort (e.g., from Excel's serial date)
+                const d = new Date(s);
+                if (d instanceof Date && !isNaN(d)) return new Date(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()));
+                
+                return null;
+            }
+
+            // --- FILE HANDLING ---
+
+            function clearFile() {
+                fileInput.value = null;
+                fileNameSpan.textContent = "No file chosen";
+                clearFileBtn.classList.add('hidden');
+                annotatedDownloadContainer.classList.add('hidden');
+                bankReceiptsByDate.clear();
+                originalUploadedJson = [];
+                ignoredRowsMap.clear();
+                totalBankReceipts = 0;
+                updateTotals();
+                showMessage('Uploaded file has been cleared.', 'info');
+            }
+
+            function generateAndDownloadTemplate() {
+                const data = [ { Date: '01-04-2025', Amount: 15000.50 }, { Date: '02-04-2025', Amount: 8000.00 } ];
+                const worksheet = XLSX.utils.json_to_sheet(data, { cellDates: false, dateNF: 'dd-mm-yyyy'});
+                const workbook = XLSX.utils.book_new();
+                XLSX.utils.book_append_sheet(workbook, worksheet, "Bank Receipts");
+                XLSX.writeFile(workbook, "Bank_Receipts_Template.xlsx");
+            }
+
+            function handleFileUpload(event) {
+                const file = event.target.files[0];
+                if (!file) { clearFile(); return; }
+                fileNameSpan.textContent = file.name;
+                clearFileBtn.classList.remove('hidden');
+                annotatedDownloadContainer.classList.add('hidden');
+
+                const reader = new FileReader();
+                reader.onload = (e) => {
+                    try {
+                        const data = new Uint8Array(e.target.result);
+                        const workbook = XLSX.read(data, { type: 'array', cellDates: true });
+                        const sheetName = workbook.SheetNames[0];
+                        const worksheet = workbook.Sheets[sheetName];
+                        const json = XLSX.utils.sheet_to_json(worksheet, { raw: false, dateNF: 'dd-mm-yyyy' });
+                        originalUploadedJson = json;
+                        processReceipts(json);
+                    } catch (error) {
+                        showMessage(`Error reading file: ${error.message}`, 'error');
+                        clearFile();
+                    } finally {
+                        updateTotals();
+                    }
+                };
+                reader.readAsArrayBuffer(file);
+            }
+
+            function processReceipts(json) {
+                bankReceiptsByDate.clear();
+                totalBankReceipts = 0;
+                ignoredRowsMap.clear();
+                
+                if (!json.length || !json[0].hasOwnProperty('Date') || !json[0].hasOwnProperty('Amount')) {
+                    throw new Error('Invalid file format. Ensure columns are named "Date" and "Amount".');
+                }
+
+                const startDate = parseDate(document.getElementById('start-date').value);
+                const endDate = parseDate(document.getElementById('end-date').value);
+                if (!startDate || !endDate) { throw new Error("Please select a valid Start and End date before uploading a file."); }
+
+                const tempReceipts = [];
+                json.forEach((row, index) => {
+                    let reason = null;
+                    const date = parseDate(row.Date);
+                    const amount = parseFloat(row.Amount);
+
+                    if (!date) reason = "Invalid or unreadable date format";
+                    else if (isNaN(amount)) reason = "Invalid Amount value";
+                    else if (date < startDate || date > endDate) reason = "Date outside selected period";
+
+                    if (reason) {
+                        ignoredRowsMap.set(index, reason);
+                    } else {
+                        tempReceipts.push({ date, amount, originalIndex: index });
+                    }
+                });
+
+                tempReceipts.sort((a, b) => a.date - b.date);
+
+                let lastValidDateString = null;
+                for (const receipt of tempReceipts) {
+                    if (receipt.date.getUTCDay() !== 0) { // Not a Sunday
+                        const currentDateString = receipt.date.toISOString().split('T')[0];
+                        const currentAmount = bankReceiptsByDate.get(currentDateString) || 0;
+                        bankReceiptsByDate.set(currentDateString, currentAmount + receipt.amount);
+                        lastValidDateString = currentDateString;
+                    } else { // Is a Sunday
+                        if (lastValidDateString) {
+                            const currentAmount = bankReceiptsByDate.get(lastValidDateString) || 0;
+                            bankReceiptsByDate.set(lastValidDateString, currentAmount + receipt.amount);
+                        } else {
+                            ignoredRowsMap.set(receipt.originalIndex, "Sunday receipt with no preceding valid day to attribute to.");
+                        }
+                    }
+                }
+                
+                totalBankReceipts = Array.from(bankReceiptsByDate.values()).reduce((sum, val) => sum + val, 0);
+                const processedCount = json.length - ignoredRowsMap.size;
+                
+                let message = `Successfully processed ${processedCount} rows, creating ${bankReceiptsByDate.size} daily receipt entries totaling ${totalBankReceipts.toFixed(2)}.`;
+                if (ignoredRowsMap.size > 0) {
+                    message += ` Ignored ${ignoredRowsMap.size} rows.`;
+                    annotatedDownloadContainer.classList.remove('hidden');
+                }
+                showMessage(message, 'info');
+            }
+
+            function handleAnnotatedDownload() {
+                if (!originalUploadedJson || originalUploadedJson.length === 0) {
+                    showMessage('No original file data found to annotate.', 'error');
+                    return;
+                }
+                const annotatedJson = originalUploadedJson.map((row, index) => {
+                    return ignoredRowsMap.has(index) ? { ...row, Reason_For_Ignorance: ignoredRowsMap.get(index) } : row;
+                });
+                const worksheet = XLSX.utils.json_to_sheet(annotatedJson);
+                const workbook = XLSX.utils.book_new();
+                XLSX.utils.book_append_sheet(workbook, worksheet, "Annotated Receipts");
+                XLSX.writeFile(workbook, "Annotated_Receipts.xlsx");
+            }
+
+            // --- INVOICE GENERATION LOGIC ---
+
+            function calculateNextInvoiceSplit(currentIndex, numInvoices, remainingQty, remainingVal, rateConfig, qtyConfig, genConfig) {
+                if (currentIndex === numInvoices - 1) {
+                    return { currentQty: remainingQty, currentVal: remainingVal };
+                }
+                
+                const numRemInv = numInvoices - currentIndex;
+                const minNextQty = (numRemInv - 1) * qtyConfig.min;
+                const maxNextQty = (numRemInv - 1) * qtyConfig.max;
+                
+                const minQty = Math.max(qtyConfig.min, remainingQty - maxNextQty);
+                const maxQty = Math.min(qtyConfig.max, remainingQty - minNextQty);
+                if (minQty > maxQty) {
+                    throw new Error(`Internal quantity generation error: The constraints have become too tight to determine a valid quantity for the next invoice.<br><br><p class="font-bold mb-2">Possible Fixes:</p><ul class="list-disc list-inside text-sm"><li>Increase the '# of Invoices Required'.</li><li>Widen the 'Min/Max Qty / Invoice' range.</li></ul>`);
+                }
+                
+                const avgQty = remainingQty / numRemInv;
+                const preferredMinQty = Math.max(minQty, avgQty * 0.75);
+                const preferredMaxQty = Math.min(maxQty, avgQty * 1.25);
+                const finalMinQty = Math.floor(Math.min(preferredMinQty, maxQty));
+                const finalMaxQty = Math.ceil(Math.max(preferredMaxQty, minQty));
+                const currentQty = Math.floor(Math.random() * (finalMaxQty - finalMinQty + 1)) + finalMinQty;
+                
+                const nextRemQty = remainingQty - currentQty;
+                const safeMinVal = Math.max(currentQty * rateConfig.min, remainingVal - (nextRemQty * rateConfig.max));
+                const safeMaxVal = Math.min(currentQty * rateConfig.max, remainingVal - (nextRemQty * rateConfig.min), genConfig.maxValue);
+                if (safeMinVal > safeMaxVal) {
+                    let reason = "The combination of remaining value and quantity cannot be split without violating future rate constraints.";
+                    if (safeMaxVal === genConfig.maxValue) reason = `The 'Max Invoice Value' (${genConfig.maxValue}) is too low to create a valid next invoice.`;
+                    let suggestion = `<p class="font-bold mb-2">Possible Fixes:</p><ul class="list-disc list-inside text-sm"><li>Try widening the 'Min Rate' and 'Max Rate' range.</li><li>Increase the 'Max Invoice Value'.</li><li>Adjust the '# of Invoices Required'.</li></ul>`;
+                    throw new Error(reason + '<br><br>' + suggestion);
+                }
+
+                let currentVal;
+                if (genConfig.aggressive) {
+                    const randomVal = Math.random() * (safeMaxVal - safeMinVal) + safeMinVal;
+                    currentVal = Math.round(randomVal / genConfig.rounding) * genConfig.rounding;
+                } else {
+                    const avgRateForRemaining = remainingVal / remainingQty;
+                    const targetVal = currentQty * avgRateForRemaining;
+                    currentVal = Math.round(targetVal / genConfig.rounding) * genConfig.rounding;
+                }
+                currentVal = Math.max(safeMinVal, Math.min(safeMaxVal, currentVal));
+                
+                return { currentQty, currentVal };
+            }
+
+            function generateInvoicesForDate(date, totalQtyForDate, totalValForDate, rateConfig, numInvoices, qtyConfig, genConfig) {
+                let invoicesForDate = [];
+                let remainingQty = totalQtyForDate;
+                let remainingVal = totalValForDate;
+
+                for (let i = 0; i < numInvoices; i++) {
+                    const {currentQty, currentVal} = calculateNextInvoiceSplit(i, numInvoices, remainingQty, remainingVal, rateConfig, qtyConfig, genConfig);
+                    const currentRate = currentQty > 0 ? currentVal / currentQty : 0;
+                    invoicesForDate.push({ date, qty: currentQty, val: currentVal, rate: currentRate });
+                    remainingQty -= currentQty;
+                    remainingVal -= currentVal;
+                }
+                return invoicesForDate;
+            }
+
+            function distributeIntegers(targets, total, key) {
+                const distribution = new Map();
+                const remainders = [];
+                let sumOfIntegers = 0;
+                for (const [id, data] of targets.entries()) {
+                    const intPart = Math.floor(data[key]);
+                    distribution.set(id, intPart);
+                    sumOfIntegers += intPart;
+                    remainders.push({ id, remainder: data[key] - intPart });
+                }
+                let remainderQty = total - sumOfIntegers;
+                remainders.sort((a, b) => b.remainder - a.remainder);
+                for (let i = 0; i < remainderQty && i < remainders.length; i++) {
+                    const keyToIncrement = remainders[i].id;
+                    distribution.set(keyToIncrement, distribution.get(keyToIncrement) + 1);
+                }
+                return distribution;
+            }
+
+            function determineInvoiceCounts(quantityMap, numInvoicesRequired, qtyConfig) {
+                const counts = new Map();
+                let totalMinInvoices = 0;
+                const potentialSplits = [];
+                for (const [date, qty] of quantityMap.entries()) {
+                    if (qty <= 0) {
+                        counts.set(date, 0);
+                        continue;
+                    }
+                    const minForDay = Math.ceil(qty / qtyConfig.max);
+                    counts.set(date, minForDay);
+                    totalMinInvoices += minForDay;
+                    if (Math.floor(qty / (minForDay + 1)) >= qtyConfig.min) {
+                        potentialSplits.push(date);
+                    }
+                }
+                if (numInvoicesRequired < totalMinInvoices) {
+                     throw new Error(`The '# of Invoices Required' (${numInvoicesRequired}) is too low.<br><br>Based on your 'Total Quantity' and 'Max Qty / Invoice' (${qtyConfig.max}), a minimum of <strong>${totalMinInvoices}</strong> invoices are needed.`);
+                }
+                let extraInvoices = numInvoicesRequired - totalMinInvoices;
+                while (extraInvoices > 0 && potentialSplits.length > 0) {
+                    const randIndex = Math.floor(Math.random() * potentialSplits.length);
+                    const dateToSplit = potentialSplits[randIndex];
+                    const currentCount = counts.get(dateToSplit);
+                    const qty = quantityMap.get(dateToSplit);
+                    if (Math.floor(qty / (currentCount + 1)) >= qtyConfig.min) {
+                        counts.set(dateToSplit, currentCount + 1);
+                        extraInvoices--;
+                    } else {
+                        potentialSplits.splice(randIndex, 1);
+                    }
+                }
+                return counts;
+            }
+            
+            function generateBankAndCashInvoices(totalQuantity, totalCashReceipts, rateConfig, numInvoicesRequired, qtyConfig, genConfig) {
+                const globalTotalInvoiceValue = totalBankReceipts + totalCashReceipts;
+                const dailyTargets = new Map();
+                for (const [date, bankAmount] of bankReceiptsByDate.entries()) {
+                    const cashPortion = totalBankReceipts > 0 ? totalCashReceipts * (bankAmount / totalBankReceipts) : totalCashReceipts / bankReceiptsByDate.size;
+                    const targetValue = bankAmount + cashPortion;
+                    const qtyPortion = totalQuantity * (targetValue / globalTotalInvoiceValue);
+                    dailyTargets.set(date, { targetValue, targetQty: qtyPortion });
+                }
+
+                const finalQuantities = distributeIntegers(dailyTargets, totalQuantity, 'targetQty');
+                const invoiceCounts = determineInvoiceCounts(finalQuantities, numInvoicesRequired, qtyConfig);
+
+                for (const [date, qty] of finalQuantities.entries()) {
+                     if (qty <= 0) continue;
+                     const { targetValue } = dailyTargets.get(date);
+                     const avgRate = targetValue / qty;
+                     if (avgRate < rateConfig.min || avgRate > rateConfig.max) {
+                         throw new Error(`The data for date <strong>${date}</strong> is impossible to generate.<br><br>The average rate required is <strong>${avgRate.toFixed(2)}</strong>, which is outside your allowed range of [${rateConfig.min}, ${rateConfig.max}].`);
+                     }
+                }
+                
+                let allInvoices = [];
+                for (const [date, totalQtyForDate] of finalQuantities.entries()) {
+                    if (totalQtyForDate <= 0) continue;
+                    const { targetValue } = dailyTargets.get(date);
+                    const numInvoicesForDay = invoiceCounts.get(date);
+                    const dateInvoices = generateInvoicesForDate(date, totalQtyForDate, targetValue, rateConfig, numInvoicesForDay, qtyConfig, genConfig);
+                    allInvoices.push(...dateInvoices);
+                }
+                return allInvoices;
+            }
+
+            function generateCashOnlyInvoices(startDate, endDate, totalQuantity, totalValue, rateConfig, numInvoices, qtyConfig, genConfig) {
+                const possibleDates = [];
+                let currentDate = new Date(startDate.getTime());
+                while(currentDate <= endDate) {
+                    if (currentDate.getUTCDay() !== 0) { // Not Sunday
+                        possibleDates.push(new Date(currentDate));
+                    }
+                    currentDate.setUTCDate(currentDate.getUTCDate() + 1);
+                }
+                if (possibleDates.length === 0) {
+                    throw new Error("No valid, non-Sunday dates available in the selected period.");
+                }
+
+                let tempInvoices = [];
+                let remainingQty = totalQuantity;
+                let remainingVal = totalValue;
+
+                for (let i = 0; i < numInvoices; i++) {
+                    const randomDate = possibleDates[Math.floor(Math.random() * possibleDates.length)];
+                    const {currentQty, currentVal} = calculateNextInvoiceSplit(i, numInvoices, remainingQty, remainingVal, rateConfig, qtyConfig, genConfig);
+                    tempInvoices.push({ date: randomDate.toISOString().split('T')[0], qty: currentQty, val: currentVal, rate: currentQty > 0 ? currentVal / currentQty : 0 });
+                    remainingQty -= currentQty;
+                    remainingVal -= currentVal;
+                }
+                return tempInvoices;
+            }
+
+            // --- MAIN FORM SUBMISSION ---
+
+            function handleFormSubmit(e) {
+                e.preventDefault();
+                hideMessage();
+                resultsSection.classList.add('hidden');
+
+                try {
+                    const totalCashReceipts = parseFloat(cashReceiptsInput.value) || 0;
+                    if (bankReceiptsByDate.size === 0 && totalCashReceipts <= 0) {
+                        throw new Error('Please upload a bank receipts file or enter a cash receipts amount greater than zero.');
+                    }
+                    
+                    const totalQuantity = parseInt(document.getElementById('total-quantity').value);
+                    const minRate = parseFloat(document.getElementById('min-rate').value);
+                    const maxRate = parseFloat(document.getElementById('max-rate').value);
+                    const startInvNum = parseInt(document.getElementById('start-inv-num').value);
+                    const numInvoicesRequired = parseInt(document.getElementById('num-invoices-required').value);
+                    const minInvoices = parseInt(minInvoicesDisplay.value);
+                    const minQtyPerInvoice = parseInt(minQtyPerInvoiceInput.value);
+                    const maxQtyPerInvoice = parseInt(maxQtyPerInvoiceInput.value);
+                    const roundingOff = parseFloat(document.getElementById('rounding-off').value);
+                    const isAggressive = document.getElementById('aggressive-swings').checked;
+                    const maxInvoiceValue = parseFloat(document.getElementById('max-invoice-value').value);
+
+                    const formInputs = [totalQuantity, minRate, maxRate, startInvNum, numInvoicesRequired, minQtyPerInvoice, maxQtyPerInvoice, roundingOff, maxInvoiceValue];
+                    if (formInputs.some(isNaN)) throw new Error('Please fill all constraint fields with valid numbers.');
+                    if (minQtyPerInvoice < 1) throw new Error('Min quantity per invoice must be 1 or greater.');
+                    if (minQtyPerInvoice > maxQtyPerInvoice) throw new Error('Min quantity per invoice cannot be greater than Max quantity.');
+                    if (numInvoicesRequired < minInvoices) { 
+                        throw new Error(`The '# of Invoices Required' (${numInvoicesRequired}) is too low.<br><br>Based on your 'Total Quantity' (${totalQuantity}) and 'Max Qty / Invoice' (${maxQtyPerInvoice}), a minimum of <strong>${minInvoices}</strong> invoices are needed.`);
+                    }
+                    if (maxInvoiceValue < minRate * minQtyPerInvoice) throw new Error(`Max Invoice Value cannot be less than the minimum possible value (${minRate * minQtyPerInvoice}).`);
+
+                    const rateConfig = { min: minRate, max: maxRate };
+                    const qtyConfig = { min: minQtyPerInvoice, max: maxQtyPerInvoice };
+                    const genConfig = { rounding: roundingOff, aggressive: isAggressive, maxValue: maxInvoiceValue };
+
+                    let allInvoices;
+                    if (bankReceiptsByDate.size > 0) {
+                        allInvoices = generateBankAndCashInvoices(totalQuantity, totalCashReceipts, rateConfig, numInvoicesRequired, qtyConfig, genConfig);
+                    } else {
+                        const startDate = parseDate(document.getElementById('start-date').value);
+                        const endDate = parseDate(document.getElementById('end-date').value);
+                        const totalValue = totalCashReceipts;
+                        allInvoices = generateCashOnlyInvoices(startDate, endDate, totalQuantity, totalValue, rateConfig, numInvoicesRequired, qtyConfig, genConfig);
+                    }
+                    
+                    allInvoices.sort((a, b) => new Date(a.date) - new Date(b.date));
+                    const finalInvoices = allInvoices.map((inv, index) => ({ ...inv, invNum: startInvNum + index }));
+                    generatedData = finalInvoices;
+                    displayResults(finalInvoices);
+
+                } catch (error) {
+                    showMessage(error.message, 'error');
+                }
+            }
+
+            function displayResults(invoices) {
+                tableBody.innerHTML = '';
+                let sumQty = 0;
+                let sumVal = 0;
+
+                invoices.forEach(inv => {
+                    const row = document.createElement('tr');
+                    row.innerHTML = `
+                        <td class="px-6 py-4 whitespace-nowrap">${inv.invNum}</td>
+                        <td class="px-6 py-4 whitespace-nowrap">${inv.date}</td>
+                        <td class="px-6 py-4 whitespace-nowrap text-right">${Math.round(inv.qty)}</td>
+                        <td class="px-6 py-4 whitespace-nowrap text-right">${inv.rate.toFixed(2)}</td>
+                        <td class="px-6 py-4 whitespace-nowrap text-right font-medium">${inv.val.toFixed(2)}</td>
+                    `;
+                    tableBody.appendChild(row);
+                    sumQty += inv.qty;
+                    sumVal += inv.val;
+                });
+                document.getElementById('total-qty-foot').textContent = Math.round(sumQty);
+                document.getElementById('total-val-foot').textContent = sumVal.toFixed(2);
+                resultsSection.classList.remove('hidden');
+                resultsSection.classList.add('fade-in');
+            }
+
+            function downloadCSV() {
+                try {
+                    if (!generatedData || generatedData.length === 0) {
+                        showMessage('No data available to download. Please generate invoices first.', 'error');
+                        return;
+                    }
+
+                    const headers = ['Invoice Number', 'Date', 'Quantity', 'Rate', 'Invoice Value'];
+                    
+                    const rows = generatedData.map(row => 
+                        [
+                            row.invNum,
+                            row.date,
+                            Math.round(row.qty || 0),
+                            (row.rate || 0).toFixed(2),
+                            (row.val || 0).toFixed(2)
+                        ].join(',')
+                    );
+
+                    const totalQty = generatedData.reduce((sum, row) => sum + (row.qty || 0), 0);
+                    const totalVal = generatedData.reduce((sum, row) => sum + (row.val || 0), 0);
+                    const footer = ['Total', '', Math.round(totalQty), '', totalVal.toFixed(2)].join(',');
+
+                    // Combine headers, rows, and footer with newline characters
+                    const csvContent = [headers.join(','), ...rows, footer].join('\n');
+                    
+                    // Use a Blob for better file handling
+                    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+                    
+                    // Create a temporary URL to the blob
+                    const url = URL.createObjectURL(blob);
+                    
+                    const link = document.createElement("a");
+                    link.setAttribute("href", url);
+                    link.setAttribute("download", "invoice_data.csv");
+                    link.style.visibility = 'hidden'; // The link doesn't need to be visible
+                    
+                    document.body.appendChild(link);
+                    link.click(); // Programmatically click the link to trigger the download
+                    document.body.removeChild(link); // Clean up by removing the link
+                    URL.revokeObjectURL(url); // Release the object URL
+                } catch (error) {
+                    console.error("CSV Download Error:", error);
+                    showMessage(`An unexpected error occurred while creating the CSV file: ${error.message}`, 'error');
+                }
+            }
+            
+            // --- Event Listeners ---
+            form.addEventListener('submit', handleFormSubmit);
+            resetBtn.addEventListener('click', handleReset);
+            fileInput.addEventListener('change', handleFileUpload);
+            clearFileBtn.addEventListener('click', clearFile);
+            downloadTemplateBtn.addEventListener('click', generateAndDownloadTemplate);
+            annotatedDownloadBtn.addEventListener('click', handleAnnotatedDownload);
+            downloadBtn.addEventListener('click', downloadCSV);
+            
+            cashReceiptsInput.addEventListener('input', updateTotals);
+            totalQuantityInput.addEventListener('input', updateMinInvoicesDisplay);
+            maxQtyPerInvoiceInput.addEventListener('input', updateMinInvoicesDisplay);
+            
+            // --- Initial Setup ---
+            updateTotals();
+            updateMinInvoicesDisplay();
+        });
+    </script>
+</body>
+</html>
