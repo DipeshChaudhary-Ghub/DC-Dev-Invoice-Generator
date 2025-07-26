@@ -72,13 +72,14 @@
                     <div>
                         <label for="total-quantity" class="block text-sm font-medium text-gray-700 mb-1">Total Quantity</label>
                         <input type="number" id="total-quantity" value="100" step="1" class="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500">
+                        <p id="average-rate-display" class="text-xs text-gray-500 mt-1 h-4"></p>
                     </div>
                      <div>
-                        <label for="min-rate" class="block text-sm font-medium text-gray-700 mb-1">Min Rate</label>
+                        <label for="min-rate" class="block text-sm font-medium text-gray-700 mb-1">Min. Rate / Quantity</label>
                         <input type="number" id="min-rate" value="500" step="1" class="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500">
                     </div>
                     <div>
-                        <label for="max-rate" class="block text-sm font-medium text-gray-700 mb-1">Max Rate</label>
+                        <label for="max-rate" class="block text-sm font-medium text-gray-700 mb-1">Max. Rate / Quantity</label>
                         <input type="number" id="max-rate" value="10000" step="1" class="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500">
                     </div>
                     
@@ -198,6 +199,8 @@
             const annotatedDownloadBtn = document.getElementById('download-annotated');
             const minQtyPerInvoiceInput = document.getElementById('min-qty-per-invoice');
             const maxQtyPerInvoiceInput = document.getElementById('max-qty-per-invoice');
+            // MODIFICATION: Get the new display element
+            const averageRateDisplay = document.getElementById('average-rate-display');
 
             // --- State ---
             let generatedData = [];
@@ -233,11 +236,26 @@
                 const maxQty = parseInt(maxQtyPerInvoiceInput.value) || 1;
                 minInvoicesDisplay.value = totalQuantity > 0 ? Math.ceil(totalQuantity / maxQty) : '0';
             }
+            
+            // MODIFICATION: New function to calculate and show the average rate
+            function updateAverageRateDisplay() {
+                const totalVal = parseFloat(totalInvoiceValueDisplay.value) || 0;
+                const totalQty = parseInt(totalQuantityInput.value) || 0;
+
+                if (totalQty > 0 && totalVal > 0) {
+                    const avgRate = (totalVal / totalQty).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+                    averageRateDisplay.textContent = `Avg. Rate: ${avgRate}`;
+                } else {
+                    averageRateDisplay.textContent = ''; // Clear it if no quantity or value
+                }
+            }
 
             function updateTotals() {
                 const cashReceipts = parseFloat(cashReceiptsInput.value) || 0;
                 const totalInvoiceValue = totalBankReceipts + cashReceipts;
                 totalInvoiceValueDisplay.value = totalInvoiceValue.toFixed(2);
+                // MODIFICATION: Update average rate whenever totals change
+                updateAverageRateDisplay();
             }
             
             function handleReset() {
@@ -432,7 +450,7 @@
                 if (safeMinVal > safeMaxVal) {
                     let reason = "The combination of remaining value and quantity cannot be split without violating future rate constraints.";
                     if (safeMaxVal === genConfig.maxValue) reason = `The 'Max Invoice Value' (${genConfig.maxValue}) is too low to create a valid next invoice.`;
-                    let suggestion = `<p class="font-bold mb-2">Possible Fixes:</p><ul class="list-disc list-inside text-sm"><li>Try widening the 'Min Rate' and 'Max Rate' range.</li><li>Increase the 'Max Invoice Value'.</li><li>Adjust the '# of Invoices Required'.</li></ul>`;
+                    let suggestion = `<p class="font-bold mb-2">Possible Fixes:</p><ul class="list-disc list-inside text-sm"><li>Try widening the 'Min. Rate / Quantity' and 'Max. Rate / Quantity' range.</li><li>Increase the 'Max Invoice Value'.</li><li>Adjust the '# of Invoices Required'.</li></ul>`;
                     throw new Error(reason + '<br><br>' + suggestion);
                 }
 
@@ -718,7 +736,12 @@
             downloadBtn.addEventListener('click', downloadCSV);
             
             cashReceiptsInput.addEventListener('input', updateTotals);
-            totalQuantityInput.addEventListener('input', updateMinInvoicesDisplay);
+            
+            // MODIFICATION: Add average rate update to quantity input listener
+            totalQuantityInput.addEventListener('input', () => {
+                updateMinInvoicesDisplay();
+                updateAverageRateDisplay();
+            });
             maxQtyPerInvoiceInput.addEventListener('input', updateMinInvoicesDisplay);
             
             // --- Initial Setup ---
