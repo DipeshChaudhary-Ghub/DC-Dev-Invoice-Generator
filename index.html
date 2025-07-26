@@ -81,7 +81,7 @@
                          <div id="annotated-download-container" class="hidden mt-2">
                             <button type="button" id="download-annotated" class="text-sm text-green-700 hover:text-green-900 font-medium">Download Annotated File with Ignored Rows</button>
                          </div>
-                        <p class="text-xs text-gray-500 mt-2">File must contain "Date" and "Amount" columns.</p>
+                        <p class="text-xs text-gray-500 mt-2">File must contain "Date" and "Amount" columns. Date format must be DD-MM-YYYY or DD/MM/YYYY.</p>
                     </div>
 
                     <div class="lg:col-span-4"><p class="block text-sm font-medium text-gray-700 mb-2">3. Enter Totals & Constraints</p></div>
@@ -301,27 +301,45 @@
                 updateMinInvoicesDisplay();
             }
 
+            // MODIFICATION: Stricter date parsing logic
             function parseDate(input) {
-                if (!input) return null;
-                if (input instanceof Date && !isNaN(input)) return new Date(Date.UTC(input.getFullYear(), input.getMonth(), input.getDate()));
+                // Keep this for Excel dates read as native objects
+                if (input instanceof Date && !isNaN(input)) {
+                    return new Date(Date.UTC(input.getFullYear(), input.getMonth(), input.getDate()));
+                }
                 
+                if (!input) return null;
+
                 const s = String(input).trim();
                 let parts;
 
-                // Match YYYY-MM-DD (from date picker or string)
+                // Priority 1: Strictly match DD-MM-YYYY or DD/MM/YYYY
+                parts = s.match(/^(\d{1,2})[-/](\d{1,2})[-/](\d{4})$/);
+                if (parts) {
+                    const day = parseInt(parts[1], 10);
+                    const month = parseInt(parts[2], 10);
+                    const year = parseInt(parts[3], 10);
+                    // Basic validation for real dates (e.g., month is 1-12)
+                    if (year > 1000 && month >= 1 && month <= 12 && day >= 1 && day <= 31) {
+                         // JS month is 0-indexed
+                        const d = new Date(Date.UTC(year, month - 1, day));
+                        // Final check to ensure date wasn't invalid (e.g. 30/02/2025)
+                        if (d.getUTCFullYear() === year && d.getUTCMonth() === month - 1 && d.getUTCDate() === day) {
+                            return d;
+                        }
+                    }
+                }
+                
+                // Priority 2: Handle the YYYY-MM-DD format from the date picker inputs
                 parts = s.match(/^(\d{4})-(\d{1,2})-(\d{1,2})$/);
-                if (parts) return new Date(Date.UTC(parts[1], parts[2] - 1, parts[3]));
-                
-                // Match DD-MM-YYYY
-                parts = s.match(/^(\d{1,2})-(\d{1,2})-(\d{4})$/);
-                if (parts) return new Date(Date.UTC(parts[3], parts[2] - 1, parts[1]));
+                if (parts) {
+                    return new Date(Date.UTC(parts[1], parseInt(parts[2], 10) - 1, parts[3]));
+                }
 
-                // Try to let JS parse it as a last resort (e.g., from Excel's serial date)
-                const d = new Date(s);
-                if (d instanceof Date && !isNaN(d)) return new Date(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()));
-                
+                // All other formats will be rejected
                 return null;
             }
+
 
             // --- FILE HANDLING ---
 
@@ -720,23 +738,14 @@
                     tableBody.appendChild(row);
                 });
 
-                const pageCount = Math.ceil(generatedData.length / ROWS_PER_PAGE);
                 paginationInfo.textContent = `Showing ${start + 1} - ${Math.min(end, generatedData.length)} of ${generatedData.length} invoices`;
 
                 const totalQty = generatedData.reduce((sum, row) => sum + row.qty, 0);
                 const totalVal = generatedData.reduce((sum, row) => sum + row.val, 0);
                 document.getElementById('total-qty-foot').textContent = Math.round(totalQty);
                 document.getElementById('total-val-foot').textContent = totalVal.toFixed(2);
-                
-                document.querySelectorAll('.pagination-btn[data-page]').forEach(btn => {
-                    btn.classList.toggle('active', parseInt(btn.dataset.page) === currentPage);
-                });
-
-                document.getElementById('prev-page-btn').disabled = (currentPage === 1);
-                document.getElementById('next-page-btn').disabled = (currentPage === pageCount);
             }
             
-            // This is the new, modern pagination logic
             function renderPaginationControls() {
                 const totalPages = Math.ceil(generatedData.length / ROWS_PER_PAGE);
                 paginationControls.innerHTML = '';
@@ -745,10 +754,11 @@
                 prevButton.id = 'prev-page-btn';
                 prevButton.textContent = 'Prev';
                 prevButton.classList.add('pagination-btn');
+                prevButton.disabled = currentPage === 1;
                 prevButton.addEventListener('click', () => {
                     if (currentPage > 1) {
                         currentPage--;
-                        renderPaginationControls();
+                        renderPaginationControls(); // Re-render controls to update active state
                         renderTablePage();
                     }
                 });
@@ -771,7 +781,7 @@
                         }
                         btn.addEventListener('click', () => {
                             currentPage = page;
-                            renderPaginationControls();
+                            renderPaginationControls(); // Re-render controls
                             renderTablePage();
                         });
                         paginationControls.appendChild(btn);
@@ -782,17 +792,17 @@
                 nextButton.id = 'next-page-btn';
                 nextButton.textContent = 'Next';
                 nextButton.classList.add('pagination-btn');
+                nextButton.disabled = currentPage === totalPages;
                 nextButton.addEventListener('click', () => {
                     if (currentPage < totalPages) {
                         currentPage++;
-                        renderPaginationControls();
+                        renderPaginationControls(); // Re-render controls
                         renderTablePage();
                     }
                 });
                 paginationControls.appendChild(nextButton);
             }
 
-            // Helper function to generate the smart page number range
             function generatePaginationRange(currentPage, totalPages) {
                 const siblingCount = 1;
                 const totalPageNumbers = siblingCount + 5;
@@ -826,7 +836,7 @@
                     let middleRange = Array.from({ length: rightSiblingIndex - leftSiblingIndex + 1 }, (_, i) => leftSiblingIndex + i);
                     return [firstPageIndex, '...', ...middleRange, '...', lastPageIndex];
                 }
-                return []; // Should not happen
+                return []; 
             }
 
             function downloadCSV() {
