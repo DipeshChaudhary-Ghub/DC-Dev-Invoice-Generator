@@ -24,6 +24,20 @@
         /* Toggle Switch Styles */
         .toggle-checkbox:checked { right: 0; border-color: #4f46e5; }
         .toggle-checkbox:checked + .toggle-label { background-color: #4f46e5; }
+        /* Pagination Styles */
+        .pagination-btn {
+            padding: 0.5rem 0.75rem; border: 1px solid #d1d5db; border-radius: 0.375rem;
+            background-color: white; font-weight: 500; font-size: 0.875rem;
+            transition: background-color 0.2s, color 0.2s;
+        }
+        .pagination-btn:hover { background-color: #f3f4f6; }
+        .pagination-btn.active {
+            background-color: #4f46e5; color: white; border-color: #4f46e5;
+            cursor: default;
+        }
+        .pagination-btn:disabled {
+            opacity: 0.5; cursor: not-allowed;
+        }
     </style>
 </head>
 <body class="bg-gray-50 text-gray-800">
@@ -150,6 +164,11 @@
                              Download as CSV
                         </button>
                     </div>
+
+                    <div id="pagination-container" class="hidden flex flex-col sm:flex-row justify-between items-center mb-4 gap-3">
+                         <p id="pagination-info" class="text-sm text-gray-700"></p>
+                         <div id="pagination-controls" class="flex items-center gap-2"></div>
+                    </div>
                     
                      <div class="overflow-x-auto border border-gray-200 rounded-lg">
                         <table class="min-w-full bg-white divide-y divide-gray-200">
@@ -199,8 +218,10 @@
             const annotatedDownloadBtn = document.getElementById('download-annotated');
             const minQtyPerInvoiceInput = document.getElementById('min-qty-per-invoice');
             const maxQtyPerInvoiceInput = document.getElementById('max-qty-per-invoice');
-            // MODIFICATION: Get the new display element
             const averageRateDisplay = document.getElementById('average-rate-display');
+            const paginationContainer = document.getElementById('pagination-container');
+            const paginationInfo = document.getElementById('pagination-info');
+            const paginationControls = document.getElementById('pagination-controls');
 
             // --- State ---
             let generatedData = [];
@@ -208,6 +229,8 @@
             let totalBankReceipts = 0;
             let originalUploadedJson = [];
             let ignoredRowsMap = new Map();
+            let currentPage = 1;
+            const ROWS_PER_PAGE = 100;
             
             // --- CORE FUNCTIONS ---
 
@@ -237,7 +260,6 @@
                 minInvoicesDisplay.value = totalQuantity > 0 ? Math.ceil(totalQuantity / maxQty) : '0';
             }
             
-            // MODIFICATION: New function to calculate and show the average rate
             function updateAverageRateDisplay() {
                 const totalVal = parseFloat(totalInvoiceValueDisplay.value) || 0;
                 const totalQty = parseInt(totalQuantityInput.value) || 0;
@@ -254,7 +276,6 @@
                 const cashReceipts = parseFloat(cashReceiptsInput.value) || 0;
                 const totalInvoiceValue = totalBankReceipts + cashReceipts;
                 totalInvoiceValueDisplay.value = totalInvoiceValue.toFixed(2);
-                // MODIFICATION: Update average rate whenever totals change
                 updateAverageRateDisplay();
             }
             
@@ -647,20 +668,41 @@
                     
                     allInvoices.sort((a, b) => new Date(a.date) - new Date(b.date));
                     const finalInvoices = allInvoices.map((inv, index) => ({ ...inv, invNum: startInvNum + index }));
-                    generatedData = finalInvoices;
-                    displayResults(finalInvoices);
+                    
+                    setupTableAndPagination(finalInvoices);
 
                 } catch (error) {
                     showMessage(error.message, 'error');
                 }
             }
 
-            function displayResults(invoices) {
-                tableBody.innerHTML = '';
-                let sumQty = 0;
-                let sumVal = 0;
+            // --- DISPLAY & PAGINATION ---
 
-                invoices.forEach(inv => {
+            function setupTableAndPagination(invoices) {
+                generatedData = invoices;
+                currentPage = 1;
+
+                if (generatedData.length > ROWS_PER_PAGE) {
+                    paginationContainer.classList.remove('hidden');
+                    renderPaginationControls();
+                } else {
+                    paginationContainer.classList.add('hidden');
+                }
+                
+                renderTablePage();
+                
+                resultsSection.classList.remove('hidden');
+                resultsSection.classList.add('fade-in');
+            }
+
+            function renderTablePage() {
+                tableBody.innerHTML = '';
+                
+                const start = (currentPage - 1) * ROWS_PER_PAGE;
+                const end = start + ROWS_PER_PAGE;
+                const paginatedItems = generatedData.slice(start, end);
+
+                paginatedItems.forEach(inv => {
                     const row = document.createElement('tr');
                     row.innerHTML = `
                         <td class="px-6 py-4 whitespace-nowrap">${inv.invNum}</td>
@@ -670,13 +712,68 @@
                         <td class="px-6 py-4 whitespace-nowrap text-right font-medium">${inv.val.toFixed(2)}</td>
                     `;
                     tableBody.appendChild(row);
-                    sumQty += inv.qty;
-                    sumVal += inv.val;
                 });
-                document.getElementById('total-qty-foot').textContent = Math.round(sumQty);
-                document.getElementById('total-val-foot').textContent = sumVal.toFixed(2);
-                resultsSection.classList.remove('hidden');
-                resultsSection.classList.add('fade-in');
+
+                // Update info text
+                paginationInfo.textContent = `Showing ${start + 1} - ${Math.min(end, generatedData.length)} of ${generatedData.length} invoices`;
+
+                // Update footer with totals for ALL invoices
+                const totalQty = generatedData.reduce((sum, row) => sum + row.qty, 0);
+                const totalVal = generatedData.reduce((sum, row) => sum + row.val, 0);
+                document.getElementById('total-qty-foot').textContent = Math.round(totalQty);
+                document.getElementById('total-val-foot').textContent = totalVal.toFixed(2);
+                
+                // Update active button style
+                document.querySelectorAll('.pagination-btn').forEach(btn => {
+                    btn.classList.toggle('active', parseInt(btn.dataset.page) === currentPage);
+                });
+            }
+
+            function renderPaginationControls() {
+                const pageCount = Math.ceil(generatedData.length / ROWS_PER_PAGE);
+                paginationControls.innerHTML = '';
+
+                // Previous Button
+                const prevButton = document.createElement('button');
+                prevButton.textContent = 'Prev';
+                prevButton.classList.add('pagination-btn');
+                prevButton.addEventListener('click', () => {
+                    if (currentPage > 1) {
+                        currentPage--;
+                        renderTablePage();
+                    }
+                });
+                prevButton.disabled = currentPage === 1;
+                paginationControls.appendChild(prevButton);
+
+                // Page Number Buttons (simplified for brevity)
+                for (let i = 1; i <= pageCount; i++) {
+                    const btn = document.createElement('button');
+                    btn.textContent = i;
+                    btn.dataset.page = i;
+                    btn.classList.add('pagination-btn');
+                    if (i === currentPage) {
+                        btn.classList.add('active');
+                    }
+                    btn.addEventListener('click', () => {
+                        currentPage = i;
+                        renderTablePage();
+                    });
+                    paginationControls.appendChild(btn);
+                }
+
+                // Next Button
+                const nextButton = document.createElement('button');
+                nextButton.textContent = 'Next';
+                nextButton.classList.add('pagination-btn');
+                nextButton.addEventListener('click', () => {
+                    if (currentPage < pageCount) {
+                        currentPage++;
+                        renderTablePage();
+                    }
+                });
+                nextButton.disabled = currentPage === pageCount;
+                paginationControls.appendChild(nextButton);
             }
 
             function downloadCSV() {
@@ -685,41 +782,24 @@
                         showMessage('No data available to download. Please generate invoices first.', 'error');
                         return;
                     }
-
                     const headers = ['Invoice Number', 'Date', 'Quantity', 'Rate', 'Invoice Value'];
-                    
                     const rows = generatedData.map(row => 
-                        [
-                            row.invNum,
-                            row.date,
-                            Math.round(row.qty || 0),
-                            (row.rate || 0).toFixed(2),
-                            (row.val || 0).toFixed(2)
-                        ].join(',')
+                        [ row.invNum, row.date, Math.round(row.qty || 0), (row.rate || 0).toFixed(2), (row.val || 0).toFixed(2) ].join(',')
                     );
-
                     const totalQty = generatedData.reduce((sum, row) => sum + (row.qty || 0), 0);
                     const totalVal = generatedData.reduce((sum, row) => sum + (row.val || 0), 0);
                     const footer = ['Total', '', Math.round(totalQty), '', totalVal.toFixed(2)].join(',');
-
-                    // Combine headers, rows, and footer with newline characters
                     const csvContent = [headers.join(','), ...rows, footer].join('\n');
-                    
-                    // Use a Blob for better file handling
                     const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
-                    
-                    // Create a temporary URL to the blob
                     const url = URL.createObjectURL(blob);
-                    
                     const link = document.createElement("a");
                     link.setAttribute("href", url);
                     link.setAttribute("download", "invoice_data.csv");
-                    link.style.visibility = 'hidden'; // The link doesn't need to be visible
-                    
+                    link.style.visibility = 'hidden';
                     document.body.appendChild(link);
-                    link.click(); // Programmatically click the link to trigger the download
-                    document.body.removeChild(link); // Clean up by removing the link
-                    URL.revokeObjectURL(url); // Release the object URL
+                    link.click();
+                    document.body.removeChild(link);
+                    URL.revokeObjectURL(url);
                 } catch (error) {
                     console.error("CSV Download Error:", error);
                     showMessage(`An unexpected error occurred while creating the CSV file: ${error.message}`, 'error');
@@ -734,10 +814,7 @@
             downloadTemplateBtn.addEventListener('click', generateAndDownloadTemplate);
             annotatedDownloadBtn.addEventListener('click', handleAnnotatedDownload);
             downloadBtn.addEventListener('click', downloadCSV);
-            
             cashReceiptsInput.addEventListener('input', updateTotals);
-            
-            // MODIFICATION: Add average rate update to quantity input listener
             totalQuantityInput.addEventListener('input', () => {
                 updateMinInvoicesDisplay();
                 updateAverageRateDisplay();
