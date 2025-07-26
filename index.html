@@ -714,27 +714,29 @@
                     tableBody.appendChild(row);
                 });
 
-                // Update info text
+                const pageCount = Math.ceil(generatedData.length / ROWS_PER_PAGE);
                 paginationInfo.textContent = `Showing ${start + 1} - ${Math.min(end, generatedData.length)} of ${generatedData.length} invoices`;
 
-                // Update footer with totals for ALL invoices
                 const totalQty = generatedData.reduce((sum, row) => sum + row.qty, 0);
                 const totalVal = generatedData.reduce((sum, row) => sum + row.val, 0);
                 document.getElementById('total-qty-foot').textContent = Math.round(totalQty);
                 document.getElementById('total-val-foot').textContent = totalVal.toFixed(2);
                 
-                // Update active button style
-                document.querySelectorAll('.pagination-btn').forEach(btn => {
+                document.querySelectorAll('.pagination-btn[data-page]').forEach(btn => {
                     btn.classList.toggle('active', parseInt(btn.dataset.page) === currentPage);
                 });
+
+                // FIXED: Update disabled state on Prev/Next buttons every time the page renders
+                document.getElementById('prev-page-btn').disabled = (currentPage === 1);
+                document.getElementById('next-page-btn').disabled = (currentPage === pageCount);
             }
 
             function renderPaginationControls() {
                 const pageCount = Math.ceil(generatedData.length / ROWS_PER_PAGE);
                 paginationControls.innerHTML = '';
 
-                // Previous Button
                 const prevButton = document.createElement('button');
+                prevButton.id = 'prev-page-btn'; // Add ID for easy selection
                 prevButton.textContent = 'Prev';
                 prevButton.classList.add('pagination-btn');
                 prevButton.addEventListener('click', () => {
@@ -743,18 +745,13 @@
                         renderTablePage();
                     }
                 });
-                prevButton.disabled = currentPage === 1;
                 paginationControls.appendChild(prevButton);
 
-                // Page Number Buttons (simplified for brevity)
                 for (let i = 1; i <= pageCount; i++) {
                     const btn = document.createElement('button');
                     btn.textContent = i;
                     btn.dataset.page = i;
                     btn.classList.add('pagination-btn');
-                    if (i === currentPage) {
-                        btn.classList.add('active');
-                    }
                     btn.addEventListener('click', () => {
                         currentPage = i;
                         renderTablePage();
@@ -762,8 +759,8 @@
                     paginationControls.appendChild(btn);
                 }
 
-                // Next Button
                 const nextButton = document.createElement('button');
+                nextButton.id = 'next-page-btn'; // Add ID for easy selection
                 nextButton.textContent = 'Next';
                 nextButton.classList.add('pagination-btn');
                 nextButton.addEventListener('click', () => {
@@ -772,7 +769,6 @@
                         renderTablePage();
                     }
                 });
-                nextButton.disabled = currentPage === pageCount;
                 paginationControls.appendChild(nextButton);
             }
 
